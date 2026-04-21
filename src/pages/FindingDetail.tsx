@@ -1,7 +1,8 @@
 import React, { useEffect, useState } from 'react';
 import { useParams, Link, useNavigate, useLocation } from 'react-router-dom';
-import { doc, getDoc, collection, query, where, onSnapshot, addDoc, updateDoc } from 'firebase/firestore';
+import { doc, getDoc, collection, query, where, onSnapshot, addDoc, updateDoc, writeBatch } from 'firebase/firestore';
 import { db, handleFirestoreError, OperationType, uploadPhoto } from '../lib/firebase';
+import { canUseFieldFeatures, canUseSafetyFeatures } from '../lib/permissions';
 import { useAuth } from '../contexts/AuthContext';
 import { ArrowLeft, AlertCircle, CheckCircle, Clock, MapPin, FileText, User, Camera, X } from 'lucide-react';
 import { format, parseISO, isPast } from 'date-fns';
@@ -65,6 +66,21 @@ const FindingDetail: React.FC = () => {
   const [submitting, setSubmitting] = useState(false);
   const [actionError, setActionError] = useState<string | null>(null);
   const [actionStatus, setActionStatus] = useState<string | null>(null);
+
+  const latestActionAt = actions.length > 0
+    ? Math.max(...actions.map((action) => new Date(action.date).getTime()))
+    : null;
+  const latestConfirmationAt = confirmations.length > 0
+    ? Math.max(...confirmations.map((confirmation) => new Date(confirmation.date).getTime()))
+    : null;
+  const hasUnconfirmedAction =
+    latestActionAt !== null &&
+    (latestConfirmationAt === null || latestActionAt > latestConfirmationAt);
+  const canRegisterConfirmation =
+    !!finding &&
+    canUseSafetyFeatures(profile?.role) &&
+    finding.status !== '完了' &&
+    (finding.status === '確認待ち' || hasUnconfirmedAction);
 
   useEffect(() => {
     if (!isAuthReady || !profile || !findingId) return;
@@ -133,6 +149,10 @@ const FindingDetail: React.FC = () => {
       setActionError('ユーザー情報または指摘事項IDが取得できません。');
       return;
     }
+    if (!canUseFieldFeatures(profile.role)) {
+      setActionError('この操作を実行する権限がありません。');
+      return;
+    }
 
     setSubmitting(true);
     setActionError(null);
@@ -157,29 +177,32 @@ const FindingDetail: React.FC = () => {
       }
 
       setActionStatus('Firestoreへ保存中...');
-      await addDoc(collection(db, 'corrective_actions'), {
+      const batch = writeBatch(db);
+      const actionRef = doc(collection(db, 'corrective_actions'));
+      batch.set(actionRef, {
         findingId,
         date: new Date().toISOString(),
         description: actionDescription,
-        inputter: profile.displayName,
+        inputter: profile.displayName || profile.email || '不明',
         photoUrl,
       });
-
-      // Update finding status to '確認待ち'
-      await updateDoc(doc(db, 'findings', findingId), {
+      const findingRef = doc(db, 'findings', findingId);
+      batch.update(findingRef, {
         status: '確認待ち'
       });
+      await batch.commit();
 
       setActionStatus('保存完了');
       setIsActionModalOpen(false);
       setActionDescription('');
       clearActionPhoto();
+      setFinding((prev) => (prev ? { ...prev, status: '確認待ち' } : prev));
     } catch (err) {
       console.error("Save failed:", err);
       setActionStatus('保存失敗');
-      setActionError('保存処理に失敗しました。必須項目や権限を確認してください。');
+      setActionError('是正対応と状態更新の保存に失敗しました。通信状態と権限を確認してください。');
       try {
-        handleFirestoreError(err, OperationType.CREATE, 'corrective_actions');
+        handleFirestoreError(err, OperationType.UPDATE, `findings/${findingId}`);
       } catch (e) {
         // handleFirestoreError throws, so we catch it to prevent crashing the app
       }
@@ -192,13 +215,17 @@ const FindingDetail: React.FC = () => {
   const handleAddConfirmation = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!profile || !findingId) return;
+    if (!canUseSafetyFeatures(profile.role)) {
+      alert('この操作を実行する権限がありません。');
+      return;
+    }
 
     setSubmitting(true);
     try {
       await addDoc(collection(db, 'confirmations'), {
         findingId,
         date: new Date().toISOString(),
-        confirmer: profile.displayName,
+        confirmer: profile.displayName || profile.email || '不明',
         result: confirmationResult,
         comment: confirmationComment,
       });
@@ -364,7 +391,7 @@ const FindingDetail: React.FC = () => {
             <div className="bg-white rounded-2xl shadow-sm border border-gray-100 p-6 md:p-8">
               <div className="flex items-center justify-between mb-6 border-b pb-2">
                 <h2 className="text-xl font-bold text-gray-900">是正対応履歴</h2>
-                {(profile?.role === 'admin' || profile?.role === 'field' || profile?.role === 'safety') && finding.status !== '完了' && (
+                {canUseFieldFeatures(profile?.role) && finding.status !== '完了' && (
                   <button 
                     onClick={() => setIsActionModalOpen(true)}
                     className="bg-blue-600 text-white px-4 py-2 rounded-lg text-sm font-medium hover:bg-blue-700 transition-colors shadow-sm"
@@ -407,7 +434,7 @@ const FindingDetail: React.FC = () => {
             <div className="bg-white rounded-2xl shadow-sm border border-gray-100 p-6 md:p-8">
               <div className="flex items-center justify-between mb-6 border-b pb-2">
                 <h2 className="text-xl font-bold text-gray-900">是正確認履歴</h2>
-                {(profile?.role === 'admin' || profile?.role === 'safety') && finding.status === '確認待ち' && (
+                {canRegisterConfirmation && (
                   <button 
                     onClick={() => setIsConfirmationModalOpen(true)}
                     className="bg-green-600 text-white px-4 py-2 rounded-lg text-sm font-medium hover:bg-green-700 transition-colors shadow-sm"
