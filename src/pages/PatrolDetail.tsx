@@ -1,5 +1,5 @@
 import React, { useEffect, useState } from 'react';
-import { useParams, Link, useNavigate } from 'react-router-dom';
+import { useParams, Link, useNavigate, useLocation } from 'react-router-dom';
 import { doc, getDoc, collection, query, where, onSnapshot, deleteDoc, getDocs } from 'firebase/firestore';
 import { db, handleFirestoreError, OperationType } from '../lib/firebase';
 import { canUseSafetyFeatures } from '../lib/permissions';
@@ -46,6 +46,7 @@ const PatrolDetail: React.FC = () => {
   const { patrolId } = useParams<{ patrolId: string }>();
   const { profile, isAuthReady } = useAuth();
   const navigate = useNavigate();
+  const location = useLocation();
   const [patrol, setPatrol] = useState<Patrol | null>(null);
   const [site, setSite] = useState<Site | null>(null);
   const [findings, setFindings] = useState<Finding[]>([]);
@@ -102,9 +103,61 @@ const PatrolDetail: React.FC = () => {
       handleFirestoreError(error, OperationType.DELETE, `patrols/${patrolId}`);
     }
   };
+  const handleExportPatrolSummaryPdf = () => {
+    navigate(`${location.pathname}?print=site-report`);
+  };
 
+  const isPrintMode = new URLSearchParams(location.search).get('print') === 'site-report';
   const issues = findings.filter(f => f.type !== '好事例');
   const goodPractices = findings.filter(f => f.type === '好事例');
+
+  useEffect(() => {
+    if (!isPrintMode || !patrol) return;
+    const t = window.setTimeout(() => window.print(), 300);
+    return () => window.clearTimeout(t);
+  }, [isPrintMode, patrol]);
+
+  if (isPrintMode && patrol) {
+    return (
+      <div className="bg-white text-gray-900 p-6 max-w-[210mm] mx-auto min-h-[297mm]">
+        <style>{`@media print { @page { size: A4 portrait; margin: 10mm; } .no-print { display:none; } }`}</style>
+        <div className="no-print mb-4 flex gap-2">
+          <button onClick={() => window.print()} className="bg-emerald-600 text-white px-4 py-2 rounded-lg">印刷</button>
+          <button onClick={() => navigate(location.pathname)} className="bg-gray-200 text-gray-800 px-4 py-2 rounded-lg">戻る</button>
+        </div>
+        <h1 className="text-2xl font-bold mb-4">パトロール結果報告書</h1>
+        <div className="grid grid-cols-2 gap-2 text-sm mb-4">
+          <p><span className="font-semibold">現場名:</span> {site?.name || '-'}</p>
+          <p><span className="font-semibold">実施日:</span> {format(parseISO(patrol.date), 'yyyy/MM/dd')}</p>
+          <p><span className="font-semibold">実施者:</span> {patrol.inspector || '-'}</p>
+          <p><span className="font-semibold">天候:</span> {patrol.weather || '-'}</p>
+        </div>
+        <h2 className="text-base font-bold mt-3 mb-1">当日の主作業</h2>
+        <div className="border border-gray-300 rounded p-2 text-sm whitespace-pre-wrap">{patrol.mainWork || '-'}</div>
+        <h2 className="text-base font-bold mt-3 mb-1">指摘事項（{issues.length}件）</h2>
+        <table className="w-full border-collapse text-xs">
+          <thead>
+            <tr className="bg-gray-100">
+              <th className="border p-1 w-10">No</th><th className="border p-1 w-20">区分</th><th className="border p-1 w-20">状態</th><th className="border p-1 w-24">緊急度</th><th className="border p-1">内容</th>
+            </tr>
+          </thead>
+          <tbody>
+            {issues.length > 0 ? issues.map((f, idx) => (
+              <tr key={f.id}>
+                <td className="border p-1 align-top">{idx + 1}</td>
+                <td className="border p-1 align-top">{f.type}</td>
+                <td className="border p-1 align-top">{f.status}</td>
+                <td className="border p-1 align-top">{f.urgency || '-'}</td>
+                <td className="border p-1 align-top whitespace-pre-wrap">{f.description || '-'}</td>
+              </tr>
+            )) : <tr><td colSpan={5} className="border p-2 text-center">指摘事項なし</td></tr>}
+          </tbody>
+        </table>
+        <h2 className="text-base font-bold mt-3 mb-1">特記事項</h2>
+        <div className="border border-gray-300 rounded p-2 text-sm whitespace-pre-wrap">{patrol.notes || '-'}</div>
+      </div>
+    );
+  }
 
   return (
     <div className="space-y-6">
@@ -139,6 +192,12 @@ const PatrolDetail: React.FC = () => {
               <Trash2 size={16} className="mr-1" />削除
             </button>
           )}
+          <button
+            onClick={handleExportPatrolSummaryPdf}
+            className="bg-emerald-600 text-white px-4 py-2 rounded-xl font-medium hover:bg-emerald-700 transition-colors flex items-center"
+          >
+            現場向けPDF出力
+          </button>
           {canUseSafetyFeatures(profile?.role) && patrol.status === 'draft' && (
             <Link
               to={`/patrols/${patrol.id}/findings/new`}
