@@ -192,7 +192,14 @@ const FindingNew: React.FC = () => {
           newData.status = '対象外';
           newData.isRecurrence = false;
           newData.repeatSourceId = '';
-        } else if (prev.type === '好事例') {
+        } else if (value === '注意喚起') {
+          newData.urgency = 'なし';
+          newData.deadline = '';
+          newData.correctionInstruction = '';
+          newData.status = '未対応';
+          newData.isRecurrence = false;
+          newData.repeatSourceId = '';
+        } else if (value === '是正指示' && prev.type !== '是正指示') {
           newData.urgency = '早期是正';
           newData.deadline = format(addDays(new Date(), 7), 'yyyy-MM-dd');
           newData.status = '未対応';
@@ -204,6 +211,10 @@ const FindingNew: React.FC = () => {
           newData.deadline = format(addDays(new Date(), 1), 'yyyy-MM-dd');
         } else if (value === '早期是正') {
           newData.deadline = format(addDays(new Date(), 7), 'yyyy-MM-dd');
+        } else if (value === '期日指定' && !newData.deadline) {
+          newData.deadline = format(new Date(), 'yyyy-MM-dd');
+        } else if (value === '次回是正') {
+          newData.deadline = '';
         }
       }
 
@@ -411,7 +422,7 @@ const FindingNew: React.FC = () => {
               </div>
             </div>
 
-            {!isGoodPractice && (
+            {isCorrection && (
               <div className="space-y-2">
                 <label className="block text-sm font-medium text-gray-700">
                   緊急度 <span className="text-red-500">*</span>
@@ -426,13 +437,15 @@ const FindingNew: React.FC = () => {
                   <option value="即時是正">即時是正</option>
                   <option value="早期是正">早期是正</option>
                   <option value="期日指定">期日指定</option>
+                  <option value="次回是正">次回是正</option>
                 </select>
                 <div className="text-xs text-gray-500 flex items-start mt-1">
                   <Info size={14} className="mr-1 shrink-0 mt-0.5" />
                   <span>
                     {formData.urgency === '即時是正' && '当日〜翌日までに是正が必要です。'}
                     {formData.urgency === '早期是正' && '1週間以内に是正が必要です。'}
-                    {formData.urgency === '期日指定' && '個別に期限を指定して是正します。'}
+                    {formData.urgency === '期日指定' && '個別に是正期限を指定します。'}
+                    {formData.urgency === '次回是正' && '次回同作業時に是正が必要です。'}
                   </span>
                 </div>
               </div>
@@ -689,17 +702,19 @@ const FindingNew: React.FC = () => {
                   )}
                 </div>
 
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">是正期限 <span className="text-red-500">*</span></label>
-                  <input
-                    type="date"
-                    name="deadline"
-                    required
-                    value={formData.deadline}
-                    onChange={handleChange}
-                    className="w-full px-4 py-3 border border-gray-300 rounded-xl focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
-                  />
-                </div>
+                {formData.urgency === '期日指定' && (
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-1">是正期限 <span className="text-red-500">*</span></label>
+                    <input
+                      type="date"
+                      name="deadline"
+                      required
+                      value={formData.deadline}
+                      onChange={handleChange}
+                      className="w-full px-4 py-3 border border-gray-300 rounded-xl focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                    />
+                  </div>
+                )}
               </>
             )}
 
