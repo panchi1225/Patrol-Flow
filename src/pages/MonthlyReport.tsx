@@ -193,6 +193,19 @@ export default function MonthlyReport() {
     ? '全現場' 
     : sites.find(s => s.id === selectedSiteId)?.name || '不明な現場';
 
+  const selectedSiteFindings = reportData
+    ? reportData.findings
+        .filter(f => f.type !== '好事例')
+        .map(finding => {
+          const patrol = reportData.patrols.find(p => p.id === finding.patrolId);
+          return {
+            ...finding,
+            patrolDate: patrol?.date || ''
+          };
+        })
+        .sort((a, b) => a.patrolDate.localeCompare(b.patrolDate))
+    : [];
+
   return (
     <div className="flex flex-col h-full">
       {/* 印刷時に非表示にするコントロールパネル */}
@@ -529,6 +542,41 @@ export default function MonthlyReport() {
                 />
               </div>
             </div>
+
+            {selectedSiteId !== 'all' && (
+              <div className="mt-10 pt-8 border-t border-gray-300 print:break-before-page print:mt-0 print:pt-0 print:border-t-0">
+                <div className="mb-4 border-b-2 border-gray-800 pb-3">
+                  <h2 className="text-2xl font-bold text-gray-900">指摘事項一覧（現場配布用）</h2>
+                  <p className="text-sm text-gray-700 mt-2">対象年月：{targetMonth.replace('-', '年')}月 / 対象現場：{selectedSiteName}</p>
+                </div>
+                <table className="w-full text-xs border-collapse border border-gray-300 table-fixed">
+                  <thead className="bg-gray-100">
+                    <tr>
+                      <th className="border border-gray-300 px-2 py-2 text-left font-semibold text-gray-700 w-20">日付</th>
+                      <th className="border border-gray-300 px-2 py-2 text-left font-semibold text-gray-700 w-24">大分類</th>
+                      <th className="border border-gray-300 px-2 py-2 text-left font-semibold text-gray-700 w-20">状態</th>
+                      <th className="border border-gray-300 px-2 py-2 text-left font-semibold text-gray-700">指摘内容</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {selectedSiteFindings.length > 0 ? (
+                      selectedSiteFindings.map(finding => (
+                        <tr key={finding.id} className="align-top">
+                          <td className="border border-gray-300 px-2 py-2 text-gray-800">{finding.patrolDate ? format(parseISO(finding.patrolDate), 'MM/dd') : '-'}</td>
+                          <td className="border border-gray-300 px-2 py-2 text-gray-800 break-words">{finding.categoryMajor || '未分類'}</td>
+                          <td className="border border-gray-300 px-2 py-2 text-gray-800 break-words">{finding.status || '-'}</td>
+                          <td className="border border-gray-300 px-2 py-2 text-gray-800 whitespace-pre-wrap break-words">{finding.description || '（記載なし）'}</td>
+                        </tr>
+                      ))
+                    ) : (
+                      <tr>
+                        <td colSpan={4} className="border border-gray-300 px-4 py-6 text-center text-gray-500">該当する指摘事項はありません</td>
+                      </tr>
+                    )}
+                  </tbody>
+                </table>
+              </div>
+            )}
 
           </div>
         ) : (
