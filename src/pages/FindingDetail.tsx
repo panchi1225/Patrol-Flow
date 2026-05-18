@@ -66,6 +66,8 @@ const FindingDetail: React.FC = () => {
   const [submitting, setSubmitting] = useState(false);
   const [isEditModalOpen, setIsEditModalOpen] = useState(false);
   const [editForm, setEditForm] = useState({
+    type: '是正指示',
+    urgency: '早期是正',
     description: '',
     location: '',
     correctionInstruction: '',
@@ -285,6 +287,8 @@ const FindingDetail: React.FC = () => {
   const openEditModal = () => {
     if (!finding) return;
     setEditForm({
+      type: finding.type ?? '是正指示',
+      urgency: finding.urgency ?? '早期是正',
       description: finding.description ?? '',
       location: finding.location ?? '',
       correctionInstruction: finding.correctionInstruction ?? '',
@@ -301,10 +305,12 @@ const FindingDetail: React.FC = () => {
     setSubmitting(true);
     try {
       await updateDoc(doc(db, 'findings', findingId), {
+        type: editForm.type,
+        urgency: editForm.type === '是正指示' ? editForm.urgency : 'なし',
         description: editForm.description,
         location: editForm.location,
         correctionInstruction: editForm.correctionInstruction,
-        deadline: editForm.deadline || null,
+        deadline: editForm.type === '是正指示' && editForm.urgency !== '次回是正' ? (editForm.deadline || null) : null,
         notes: editForm.notes,
         status: editForm.status,
       });
@@ -368,12 +374,11 @@ const FindingDetail: React.FC = () => {
                 <span className="px-3 py-1 text-xs font-medium rounded-full bg-gray-100 text-gray-700">
                   {finding.type}
                 </span>
-                {finding.urgency && (
+                {finding.urgency === '即時是正' && (
                   <span className={`px-3 py-1 text-xs font-medium rounded-full ${
-                    finding.urgency === '即時是正' ? 'bg-red-100 text-red-700 border border-red-200' :
-                    'bg-gray-100 text-gray-700'
+                    'bg-red-100 text-red-700 border border-red-200'
                   }`}>
-                    {finding.urgency}
+                    即時是正
                   </span>
                 )}
                 {isOverdue && (
@@ -401,12 +406,12 @@ const FindingDetail: React.FC = () => {
                 </p>
               </div>
             )}
-            {finding.deadline && (
+            {(finding.urgency === '次回是正' || finding.deadline) && (
               <div>
                 <p className="text-sm text-gray-500 mb-1">是正期限</p>
                 <p className={`font-medium flex items-center ${isOverdue ? 'text-red-600' : 'text-gray-900'}`}>
                   <Clock size={16} className="mr-2" />
-                  {format(parseISO(finding.deadline), 'yyyy/MM/dd')}
+                  {finding.urgency === '次回是正' ? '次回是正' : format(parseISO(finding.deadline as string), 'yyyy/MM/dd')}
                 </p>
               </div>
             )}
@@ -652,10 +657,40 @@ const FindingDetail: React.FC = () => {
               <button onClick={() => setIsEditModalOpen(false)} className="text-gray-400 hover:text-gray-600"><X size={24} /></button>
             </div>
             <form onSubmit={handleUpdateFinding} className="p-6 space-y-4">
+              <select
+                value={editForm.type}
+                onChange={(e) => {
+                  const nextType = e.target.value;
+                  setEditForm(prev => ({
+                    ...prev,
+                    type: nextType,
+                    urgency: nextType === '是正指示' ? prev.urgency : 'なし',
+                    correctionInstruction: nextType === '是正指示' ? prev.correctionInstruction : '',
+                    deadline: nextType === '是正指示' ? prev.deadline : '',
+                    status: nextType === '注意喚起' ? (prev.status === '対象外' ? '未対応' : prev.status) : prev.status,
+                  }));
+                }}
+                className="w-full px-4 py-3 border border-gray-300 rounded-xl"
+              >
+                <option value="是正指示">是正指示</option>
+                <option value="注意喚起">注意喚起</option>
+              </select>
+              {editForm.type === '是正指示' && (
+                <select
+                  value={editForm.urgency}
+                  onChange={(e) => setEditForm(prev => ({ ...prev, urgency: e.target.value }))}
+                  className="w-full px-4 py-3 border border-gray-300 rounded-xl"
+                >
+                  <option value="即時是正">即時是正</option>
+                  <option value="早期是正">早期是正</option>
+                  <option value="期日指定">期日指定</option>
+                  <option value="次回是正">次回是正</option>
+                </select>
+              )}
               <textarea required rows={3} value={editForm.description} onChange={(e) => setEditForm(prev => ({ ...prev, description: e.target.value }))} className="w-full px-4 py-3 border border-gray-300 rounded-xl" />
               <input value={editForm.location} onChange={(e) => setEditForm(prev => ({ ...prev, location: e.target.value }))} placeholder="発生場所" className="w-full px-4 py-3 border border-gray-300 rounded-xl" />
-              {finding.type !== '好事例' && <textarea rows={3} value={editForm.correctionInstruction} onChange={(e) => setEditForm(prev => ({ ...prev, correctionInstruction: e.target.value }))} placeholder="是正内容（指示）" className="w-full px-4 py-3 border border-gray-300 rounded-xl" />}
-              <input type="date" value={editForm.deadline} onChange={(e) => setEditForm(prev => ({ ...prev, deadline: e.target.value }))} className="w-full px-4 py-3 border border-gray-300 rounded-xl" />
+              {editForm.type === '是正指示' && <textarea rows={3} value={editForm.correctionInstruction} onChange={(e) => setEditForm(prev => ({ ...prev, correctionInstruction: e.target.value }))} placeholder="是正内容（指示）" className="w-full px-4 py-3 border border-gray-300 rounded-xl" />}
+              {editForm.type === '是正指示' && editForm.urgency !== '次回是正' && <input type="date" value={editForm.deadline} onChange={(e) => setEditForm(prev => ({ ...prev, deadline: e.target.value }))} className="w-full px-4 py-3 border border-gray-300 rounded-xl" />}
               <select value={editForm.status} onChange={(e) => setEditForm(prev => ({ ...prev, status: e.target.value }))} className="w-full px-4 py-3 border border-gray-300 rounded-xl">
                 <option value="未対応">未対応</option><option value="対応中">対応中</option><option value="確認待ち">確認待ち</option><option value="完了">完了</option><option value="対象外">対象外</option>
               </select>

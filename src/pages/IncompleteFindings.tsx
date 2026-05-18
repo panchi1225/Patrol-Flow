@@ -32,6 +32,31 @@ const IncompleteFindings: React.FC = () => {
   const [searchParams, setSearchParams] = useSearchParams();
   const isOverdueFilter = searchParams.get('filter') === 'overdue';
 
+  const getFindingSortPriority = (finding: Finding): number => {
+    if (finding.urgency === '即時是正') return 0;
+    if (finding.urgency === '次回是正') return 2;
+    if (finding.type === '注意喚起') return 3;
+    return 1; // 早期是正・期日指定・その他
+  };
+
+  const sortFindings = (a: Finding, b: Finding): number => {
+    const priorityDiff = getFindingSortPriority(a) - getFindingSortPriority(b);
+    if (priorityDiff !== 0) return priorityDiff;
+
+    if (getFindingSortPriority(a) === 1) {
+      if (!a.deadline && !b.deadline) return 0;
+      if (!a.deadline) return 1;
+      if (!b.deadline) return -1;
+      return new Date(a.deadline).getTime() - new Date(b.deadline).getTime();
+    }
+
+    if (a.deadline && b.deadline) {
+      return new Date(a.deadline).getTime() - new Date(b.deadline).getTime();
+    }
+
+    return 0;
+  };
+
   useEffect(() => {
     if (!isAuthReady || !profile) return;
 
@@ -45,12 +70,7 @@ const IncompleteFindings: React.FC = () => {
       snapshot.forEach((doc) => {
         findingData.push({ id: doc.id, ...doc.data() } as Finding);
       });
-      // Sort by deadline (overdue first, then soonest)
-      findingData.sort((a, b) => {
-        if (!a.deadline) return 1;
-        if (!b.deadline) return -1;
-        return new Date(a.deadline).getTime() - new Date(b.deadline).getTime();
-      });
+      findingData.sort(sortFindings);
       setFindings(findingData);
     }, (error) => handleFirestoreError(error, OperationType.LIST, 'findings'));
 
@@ -209,12 +229,11 @@ const IncompleteFindings: React.FC = () => {
                       <span className="px-2 py-1 text-xs font-medium rounded-full bg-gray-100 text-gray-700">
                         {finding.type}
                       </span>
-                      {finding.urgency && (
+                      {finding.urgency === '即時是正' && (
                         <span className={`px-2 py-1 text-xs font-medium rounded-full ${
-                          finding.urgency === '即時是正' ? 'bg-red-100 text-red-700 border border-red-200' :
-                          'bg-gray-100 text-gray-700'
+                          'bg-red-100 text-red-700 border border-red-200'
                         }`}>
-                          {finding.urgency}
+                          即時是正
                         </span>
                       )}
                       {isOverdue && (
@@ -229,10 +248,10 @@ const IncompleteFindings: React.FC = () => {
                     </h3>
                     
                     <div className="flex flex-wrap items-center text-sm text-gray-600 gap-4">
-                      {finding.deadline && (
+                      {(finding.urgency === '次回是正' || finding.deadline) && (
                         <div className={`flex items-center ${isOverdue ? 'text-red-600 font-medium' : ''}`}>
                           <Clock size={16} className="mr-1" />
-                          期限: {format(parseISO(finding.deadline), 'yyyy/MM/dd')}
+                          期限: {finding.urgency === '次回是正' ? '次回是正' : format(parseISO(finding.deadline as string), 'yyyy/MM/dd')}
                         </div>
                       )}
                     </div>
