@@ -28,6 +28,7 @@ interface Finding {
   categoryMiddle?: string;
   categoryMinor?: string;
   description?: string;
+  urgency?: string;
 }
 
 export default function MonthlyReport() {
@@ -192,6 +193,13 @@ export default function MonthlyReport() {
   const selectedSiteName = selectedSiteId === 'all' 
     ? '全現場' 
     : sites.find(s => s.id === selectedSiteId)?.name || '不明な現場';
+  const urgencyOrder: Record<string, number> = {
+    '即時是正': 0,
+    '早期是正': 1,
+    '期日指定': 2,
+    '次回是正': 3,
+    '注意喚起': 4
+  };
 
   const selectedSiteFindings = reportData
     ? reportData.findings
@@ -203,7 +211,11 @@ export default function MonthlyReport() {
             patrolDate: patrol?.date || ''
           };
         })
-        .sort((a, b) => a.patrolDate.localeCompare(b.patrolDate))
+        .sort((a, b) => {
+          const urgencyDiff = (urgencyOrder[a.urgency || ''] ?? 99) - (urgencyOrder[b.urgency || ''] ?? 99);
+          if (urgencyDiff !== 0) return urgencyDiff;
+          return a.patrolDate.localeCompare(b.patrolDate);
+        })
     : [];
 
   return (
@@ -555,6 +567,7 @@ export default function MonthlyReport() {
                       <th className="border border-gray-300 px-2 py-2 text-left font-semibold text-gray-700 w-20">日付</th>
                       <th className="border border-gray-300 px-2 py-2 text-left font-semibold text-gray-700 w-24">大分類</th>
                       <th className="border border-gray-300 px-2 py-2 text-left font-semibold text-gray-700 w-20">状態</th>
+                      <th className="border border-gray-300 px-2 py-2 text-left font-semibold text-gray-700 w-24">是正期限</th>
                       <th className="border border-gray-300 px-2 py-2 text-left font-semibold text-gray-700">指摘内容</th>
                     </tr>
                   </thead>
@@ -564,13 +577,24 @@ export default function MonthlyReport() {
                         <tr key={finding.id} className="align-top">
                           <td className="border border-gray-300 px-2 py-2 text-gray-800">{finding.patrolDate ? format(parseISO(finding.patrolDate), 'MM/dd') : '-'}</td>
                           <td className="border border-gray-300 px-2 py-2 text-gray-800 break-words">{finding.categoryMajor || '未分類'}</td>
-                          <td className="border border-gray-300 px-2 py-2 text-gray-800 break-words">{finding.status || '-'}</td>
+                      <th className="border border-gray-300 px-2 py-2 text-left font-semibold text-gray-700 w-24">是正期限</th>
+                      <th className="border border-gray-300 px-2 py-2 text-left font-semibold text-gray-700">指摘内容</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {selectedSiteFindings.length > 0 ? (
+                      selectedSiteFindings.map(finding => (
+                        <tr key={finding.id} className="align-top">
+                          <td className="border border-gray-300 px-2 py-2 text-gray-800">{finding.patrolDate ? format(parseISO(finding.patrolDate), 'MM/dd') : '-'}</td>
+                          <td className="border border-gray-300 px-2 py-2 text-gray-800 break-words">{finding.categoryMajor || '未分類'}</td>
+                          <td className={cn('border border-gray-300 px-2 py-2 break-words', finding.status === '未対応' ? 'text-red-600 font-semibold' : 'text-gray-800')}>{finding.status || '-'}</td>
+                          <td className="border border-gray-300 px-2 py-2 text-gray-800 break-words">{finding.urgency === '次回是正' ? '次回是正' : (finding.deadline ? format(parseISO(finding.deadline), 'yyyy/MM/dd') : '-')}</td>
                           <td className="border border-gray-300 px-2 py-2 text-gray-800 whitespace-pre-wrap break-words">{finding.description || '（記載なし）'}</td>
                         </tr>
                       ))
                     ) : (
                       <tr>
-                        <td colSpan={4} className="border border-gray-300 px-4 py-6 text-center text-gray-500">該当する指摘事項はありません</td>
+                        <td colSpan={5} className="border border-gray-300 px-4 py-6 text-center text-gray-500">該当する指摘事項はありません</td>
                       </tr>
                     )}
                   </tbody>
