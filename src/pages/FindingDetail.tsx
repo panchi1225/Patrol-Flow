@@ -7,6 +7,13 @@ import { useAuth } from '../contexts/AuthContext';
 import { ArrowLeft, AlertCircle, CheckCircle, Clock, MapPin, FileText, User, Camera, X, Trash2 } from 'lucide-react';
 import { format, parseISO, isPast } from 'date-fns';
 
+interface Category {
+  id: string;
+  name: string;
+  order: number;
+  isActive: boolean;
+}
+
 interface Finding {
   id: string;
   patrolId: string;
@@ -74,9 +81,11 @@ const FindingDetail: React.FC = () => {
     deadline: '',
     notes: '',
     status: '未対応',
+    categoryMajor: '',
   });
   const [actionError, setActionError] = useState<string | null>(null);
   const [actionStatus, setActionStatus] = useState<string | null>(null);
+  const [categoryOptions, setCategoryOptions] = useState<string[]>([]);
 
   useEffect(() => {
     if (!isAuthReady || !profile || !findingId) return;
@@ -140,6 +149,23 @@ const FindingDetail: React.FC = () => {
       unsubscribeConfirmations();
     };
   }, [isAuthReady, profile, findingId]);
+
+  useEffect(() => {
+    const fetchCategories = async () => {
+      const categorySnap = await getDocs(query(collection(db, 'category_major')));
+      const loaded = categorySnap.docs
+        .map((docSnap) => ({ id: docSnap.id, ...docSnap.data() } as Category))
+        .filter(category => category.isActive !== false)
+        .sort((a, b) => a.order - b.order)
+        .map(category => category.name);
+      setCategoryOptions(Array.from(new Set([...loaded, 'その他'])));
+    };
+
+    fetchCategories().catch((error) => {
+      console.error('Failed to fetch categories:', error);
+      setCategoryOptions(['その他']);
+    });
+  }, []);
 
   const handleActionPhotoChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     if (e.target.files && e.target.files[0]) {
@@ -295,6 +321,7 @@ const FindingDetail: React.FC = () => {
       deadline: finding.deadline ?? '',
       notes: finding.notes ?? '',
       status: finding.status ?? '未対応',
+      categoryMajor: finding.categoryMinor ?? finding.categoryMajor ?? '',
     });
     setIsEditModalOpen(true);
   };
@@ -313,6 +340,9 @@ const FindingDetail: React.FC = () => {
         deadline: editForm.type === '是正指示' && editForm.urgency !== '次回是正' ? (editForm.deadline || null) : null,
         notes: editForm.notes,
         status: editForm.status,
+        categoryMajor: editForm.categoryMajor,
+        categoryMinor: editForm.categoryMajor,
+        categoryMiddle: null,
       });
       setIsEditModalOpen(false);
     } catch (error) {
@@ -327,6 +357,7 @@ const FindingDetail: React.FC = () => {
   if (!finding) return <div className="p-8 text-center text-red-500">指摘事項が見つかりません。</div>;
 
   const isOverdue = finding.deadline && isPast(parseISO(finding.deadline)) && finding.status !== '完了';
+  const displayCategory = finding.categoryMinor || finding.categoryMajor;
 
   const handleBack = (e: React.MouseEvent) => {
     e.preventDefault();
@@ -415,33 +446,15 @@ const FindingDetail: React.FC = () => {
                 </p>
               </div>
             )}
-            {(finding.categoryMajor || finding.categoryMiddle || finding.categoryMinor) && (
+            {displayCategory && (
               <div className="lg:col-span-2">
                 <p className="text-sm text-gray-500 mb-1">分類</p>
                 <div className="flex flex-wrap items-center gap-2">
-                  {finding.categoryMajor && (
-                    <span className="px-3 py-1 bg-gray-100 text-gray-700 rounded-lg text-sm font-medium border border-gray-200">
-                      {finding.categoryMajor}
-                    </span>
-                  )}
-                  {finding.categoryMiddle && (
-                    <>
-                      <span className="text-gray-400">&gt;</span>
-                      <span className="px-3 py-1 bg-gray-100 text-gray-700 rounded-lg text-sm font-medium border border-gray-200">
-                        {finding.categoryMiddle}
-                      </span>
-                    </>
-                  )}
-                  {finding.categoryMinor && (
-                    <>
-                      <span className="text-gray-400">&gt;</span>
-                      <span className="px-3 py-1 bg-gray-100 text-gray-700 rounded-lg text-sm font-medium border border-gray-200">
-                        {finding.categoryMinor === 'その他' && finding.categoryOtherReason 
-                          ? `その他（${finding.categoryOtherReason}）` 
-                          : finding.categoryMinor}
-                      </span>
-                    </>
-                  )}
+                  <span className="px-3 py-1 bg-gray-100 text-gray-700 rounded-lg text-sm font-medium border border-gray-200">
+                    {displayCategory === 'その他' && finding.categoryOtherReason
+                      ? `その他（${finding.categoryOtherReason}）`
+                      : displayCategory}
+                  </span>
                 </div>
               </div>
             )}
@@ -688,6 +701,17 @@ const FindingDetail: React.FC = () => {
                 </select>
               )}
               <textarea required rows={3} value={editForm.description} onChange={(e) => setEditForm(prev => ({ ...prev, description: e.target.value }))} className="w-full px-4 py-3 border border-gray-300 rounded-xl" />
+              <select
+                value={editForm.categoryMajor}
+                onChange={(e) => setEditForm(prev => ({ ...prev, categoryMajor: e.target.value }))}
+                className="w-full px-4 py-3 border border-gray-300 rounded-xl"
+                required
+              >
+                <option value="">分類を選択してください</option>
+                {categoryOptions.map((categoryName) => (
+                  <option key={categoryName} value={categoryName}>{categoryName}</option>
+                ))}
+              </select>
               <input value={editForm.location} onChange={(e) => setEditForm(prev => ({ ...prev, location: e.target.value }))} placeholder="発生場所" className="w-full px-4 py-3 border border-gray-300 rounded-xl" />
               {editForm.type === '是正指示' && <textarea rows={3} value={editForm.correctionInstruction} onChange={(e) => setEditForm(prev => ({ ...prev, correctionInstruction: e.target.value }))} placeholder="是正内容（指示）" className="w-full px-4 py-3 border border-gray-300 rounded-xl" />}
               {editForm.type === '是正指示' && editForm.urgency !== '次回是正' && <input type="date" value={editForm.deadline} onChange={(e) => setEditForm(prev => ({ ...prev, deadline: e.target.value }))} className="w-full px-4 py-3 border border-gray-300 rounded-xl" />}
