@@ -153,7 +153,7 @@ export default function MonthlyReport() {
       ? Math.round((completedFindings.length / totalFindings) * 100)
       : 0;
 
-    // 大分類別件数
+    // 分類別件数
     const majorCategoryCounts = issues.reduce((acc, curr) => {
       const cat = curr.categoryMajor || '未分類';
       acc[cat] = (acc[cat] || 0) + 1;
@@ -219,6 +219,34 @@ export default function MonthlyReport() {
           if (urgencyDiff !== 0) return urgencyDiff;
           return a.patrolDate.localeCompare(b.patrolDate);
         })
+    : [];
+
+  const allSiteFindings = reportData
+    ? sites
+        .map(site => {
+          const findings = reportData.findings
+            .filter(f => f.type !== '好事例')
+            .map(finding => {
+              const patrol = reportData.patrols.find(p => p.id === finding.patrolId);
+              return {
+                ...finding,
+                patrolDate: patrol?.date || '',
+                siteId: patrol?.siteId || ''
+              };
+            })
+            .filter(finding => finding.siteId === site.id)
+            .sort((a, b) => {
+              const urgencyDiff = (urgencyOrder[a.urgency || ''] ?? 99) - (urgencyOrder[b.urgency || ''] ?? 99);
+              if (urgencyDiff !== 0) return urgencyDiff;
+              return a.patrolDate.localeCompare(b.patrolDate);
+            });
+          return {
+            siteId: site.id,
+            siteName: site.name,
+            findings
+          };
+        })
+        .filter(siteData => siteData.findings.length > 0)
     : [];
 
   return (
@@ -353,11 +381,11 @@ export default function MonthlyReport() {
             {/* 3. 集計表示 */}
             <div className="mb-10 grid grid-cols-1 xl:grid-cols-2 gap-8 print:gap-4">
               <div>
-                <h2 className="text-xl font-bold text-gray-800 mb-4 border-l-4 border-blue-600 pl-3">大分類別件数</h2>
+                <h2 className="text-xl font-bold text-gray-800 mb-4 border-l-4 border-blue-600 pl-3">分類別件数</h2>
                 <table className="w-full text-sm border-collapse border border-gray-300">
                   <thead className="bg-gray-100">
                     <tr>
-                      <th className="border border-gray-300 px-4 py-2 text-left font-semibold text-gray-700">大分類</th>
+                      <th className="border border-gray-300 px-4 py-2 text-left font-semibold text-gray-700">分類</th>
                       <th className="border border-gray-300 px-4 py-2 text-right font-semibold text-gray-700 w-24">件数</th>
                     </tr>
                   </thead>
@@ -569,7 +597,7 @@ export default function MonthlyReport() {
                   <thead className="bg-gray-100">
                     <tr>
                       <th className="border border-gray-300 px-2 py-2 text-left font-semibold text-gray-700 w-20">日付</th>
-                      <th className="border border-gray-300 px-2 py-2 text-left font-semibold text-gray-700 w-24">大分類</th>
+                      <th className="border border-gray-300 px-2 py-2 text-left font-semibold text-gray-700 w-24">分類</th>
                       <th className="border border-gray-300 px-2 py-2 text-left font-semibold text-gray-700 w-20">状態</th>
                       <th className="border border-gray-300 px-2 py-2 text-left font-semibold text-gray-700 w-24">是正期限</th>
                       <th className="border border-gray-300 px-2 py-2 text-left font-semibold text-gray-700">指摘内容</th>
@@ -597,6 +625,47 @@ export default function MonthlyReport() {
                     )}
                   </tbody>
                 </table>
+              </div>
+            )}
+
+            {selectedSiteId === 'all' && allSiteFindings.length > 0 && (
+              <div className="mt-10 pt-8 border-t border-gray-300 print:break-before-page print:mt-0 print:pt-0 print:border-t-0">
+                <div className="mb-4 border-b-2 border-gray-800 pb-3">
+                  <h2 className="text-2xl font-bold text-gray-900">指摘事項一覧（現場別）</h2>
+                  <p className="text-sm text-gray-700 mt-2">対象年月：{targetMonth.replace('-', '年')}月 / 対象現場：{selectedSiteName}</p>
+                </div>
+
+                {allSiteFindings.map((siteData, index) => (
+                  <div key={siteData.siteId} className={cn(index > 0 && 'mt-8 print:break-before-page print:mt-0')}>
+                    <h3 className="text-lg font-bold text-gray-900 mb-3">{siteData.siteName}</h3>
+                    <table className="w-full text-xs border-collapse border border-gray-300 table-fixed">
+                      <thead className="bg-gray-100">
+                        <tr>
+                          <th className="border border-gray-300 px-2 py-2 text-left font-semibold text-gray-700 w-20">日付</th>
+                          <th className="border border-gray-300 px-2 py-2 text-left font-semibold text-gray-700 w-24">分類</th>
+                          <th className="border border-gray-300 px-2 py-2 text-left font-semibold text-gray-700 w-20">状態</th>
+                          <th className="border border-gray-300 px-2 py-2 text-left font-semibold text-gray-700 w-24">是正期限</th>
+                          <th className="border border-gray-300 px-2 py-2 text-left font-semibold text-gray-700">指摘内容</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {siteData.findings.map(finding => (
+                          <tr key={finding.id} className="align-top">
+                            <td className="border border-gray-300 px-2 py-2 text-gray-800">{finding.patrolDate ? format(parseISO(finding.patrolDate), 'MM/dd') : '-'}</td>
+                            <td className="border border-gray-300 px-2 py-2 text-gray-800 break-words">{finding.categoryMajor || '未分類'}</td>
+                            <td className={cn('border border-gray-300 px-2 py-2 break-words', finding.status === '未対応' ? 'text-red-600 font-semibold' : 'text-gray-800')}>
+                              {finding.status || '-'}
+                            </td>
+                            <td className="border border-gray-300 px-2 py-2 text-gray-800 break-words">
+                              {finding.urgency === '次回是正' ? '次回是正' : (finding.deadline ? format(parseISO(finding.deadline), 'yyyy/MM/dd') : '-')}
+                            </td>
+                            <td className="border border-gray-300 px-2 py-2 text-gray-800 whitespace-pre-wrap break-words">{finding.description || '（記載なし）'}</td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
+                ))}
               </div>
             )}
           </div>
