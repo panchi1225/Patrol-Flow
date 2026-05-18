@@ -1,9 +1,8 @@
 import React, { useState, useEffect } from 'react';
 import { collection, getDocs, query, where, orderBy } from 'firebase/firestore';
-import { db, handleFirestoreError, OperationType } from '../lib/firebase';
-import { format, parseISO, startOfMonth, endOfMonth, isAfter, isBefore, isEqual } from 'date-fns';
-import { ja } from 'date-fns/locale';
-import { Printer, FileText, AlertCircle, CheckCircle, Clock, Repeat, ThumbsUp, MapPin, Calendar, Search } from 'lucide-react';
+import { db } from '../lib/firebase';
+import { format, parseISO, endOfMonth, isBefore } from 'date-fns';
+import { Printer, FileText, AlertCircle, Clock, Repeat, ThumbsUp, MapPin, Calendar, Search } from 'lucide-react';
 import { cn } from '../components/Layout';
 
 interface Site {
@@ -35,10 +34,10 @@ export default function MonthlyReport() {
   const [sites, setSites] = useState<Site[]>([]);
   const [targetMonth, setTargetMonth] = useState(format(new Date(), 'yyyy-MM'));
   const [selectedSiteId, setSelectedSiteId] = useState<string>('all');
-  
+
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  
+
   const [reportData, setReportData] = useState<{
     patrols: Patrol[];
     findings: Finding[];
@@ -75,12 +74,12 @@ export default function MonthlyReport() {
       const endDate = format(endOfMonth(new Date(parseInt(year), parseInt(month) - 1)), 'yyyy-MM-dd');
 
       // パトロールの取得
-      let patrolsQuery = query(
+      const patrolsQuery = query(
         collection(db, 'patrols'),
         where('date', '>=', startDate),
         where('date', '<=', endDate)
       );
-      
+
       const patrolsSnapshot = await getDocs(patrolsQuery);
       let patrolsData = patrolsSnapshot.docs.map(doc => ({
         id: doc.id,
@@ -136,20 +135,22 @@ export default function MonthlyReport() {
     const totalFindings = issues.length;
     const uncompletedFindings = issues.filter(f => f.status !== '完了');
     const completedFindings = issues.filter(f => f.status === '完了');
-    
+
     // 期限超過
     const today = format(new Date(), 'yyyy-MM-dd');
-    const overdueFindings = uncompletedFindings.filter(f => f.deadline && isBefore(parseISO(f.deadline), parseISO(today)));
-    
+    const overdueFindings = uncompletedFindings.filter(
+      f => f.deadline && isBefore(parseISO(f.deadline), parseISO(today))
+    );
+
     // 再発
     const recurringFindings = issues.filter(f => f.isRecurrence);
-    
+
     // 好事例
     const goodPractices = findings.filter(f => f.type === '好事例');
-    
+
     // 是正確認済率
-    const completionRate = totalFindings > 0 
-      ? Math.round((completedFindings.length / totalFindings) * 100) 
+    const completionRate = totalFindings > 0
+      ? Math.round((completedFindings.length / totalFindings) * 100)
       : 0;
 
     // 大分類別件数
@@ -190,9 +191,11 @@ export default function MonthlyReport() {
   };
 
   const stats = calculateStats();
-  const selectedSiteName = selectedSiteId === 'all' 
-    ? '全現場' 
-    : sites.find(s => s.id === selectedSiteId)?.name || '不明な現場';
+  const selectedSiteName =
+    selectedSiteId === 'all'
+      ? '全現場'
+      : sites.find(s => s.id === selectedSiteId)?.name || '不明な現場';
+
   const urgencyOrder: Record<string, number> = {
     '即時是正': 0,
     '早期是正': 1,
@@ -302,7 +305,6 @@ export default function MonthlyReport() {
       <div className="flex-1 overflow-y-auto print:overflow-visible">
         {reportData && stats ? (
           <div className="bg-white shadow-sm border border-gray-200 rounded-xl max-w-5xl mx-auto p-8 md:p-12 print:shadow-none print:border-none print:p-0 print:max-w-none">
-            
             {/* 1. 基本情報 */}
             <div className="text-center mb-10 border-b-2 border-gray-800 pb-6">
               <h1 className="text-3xl font-bold text-gray-900 mb-4">安全パトロール月次報告書</h1>
@@ -364,11 +366,11 @@ export default function MonthlyReport() {
                       (Object.entries(stats.majorCategoryCounts) as [string, number][])
                         .sort((a, b) => b[1] - a[1])
                         .map(([category, count]) => (
-                        <tr key={category}>
-                          <td className="border border-gray-300 px-4 py-2 text-gray-800">{category}</td>
-                          <td className="border border-gray-300 px-4 py-2 text-right font-medium">{count}</td>
-                        </tr>
-                      ))
+                          <tr key={category}>
+                            <td className="border border-gray-300 px-4 py-2 text-gray-800">{category}</td>
+                            <td className="border border-gray-300 px-4 py-2 text-right font-medium">{count}</td>
+                          </tr>
+                        ))
                     ) : (
                       <tr>
                         <td colSpan={2} className="border border-gray-300 px-4 py-4 text-center text-gray-500">データがありません</td>
@@ -393,11 +395,11 @@ export default function MonthlyReport() {
                         (Object.entries(stats.siteCounts) as [string, number][])
                           .sort((a, b) => b[1] - a[1])
                           .map(([site, count]) => (
-                          <tr key={site}>
-                            <td className="border border-gray-300 px-4 py-2 text-gray-800">{site}</td>
-                            <td className="border border-gray-300 px-4 py-2 text-right font-medium">{count}</td>
-                          </tr>
-                        ))
+                            <tr key={site}>
+                              <td className="border border-gray-300 px-4 py-2 text-gray-800">{site}</td>
+                              <td className="border border-gray-300 px-4 py-2 text-right font-medium">{count}</td>
+                            </tr>
+                          ))
                       ) : (
                         <tr>
                           <td colSpan={2} className="border border-gray-300 px-4 py-4 text-center text-gray-500">データがありません</td>
@@ -431,7 +433,9 @@ export default function MonthlyReport() {
                         const site = sites.find(s => s.id === patrol?.siteId);
                         return (
                           <tr key={finding.id}>
-                            <td className="border border-gray-300 px-3 py-2 text-red-600 font-medium">{finding.dueDate ? format(parseISO(finding.dueDate), 'MM/dd') : '-'}</td>
+                            <td className="border border-gray-300 px-3 py-2 text-red-600 font-medium">
+                              {finding.deadline ? format(parseISO(finding.deadline), 'MM/dd') : '-'}
+                            </td>
                             <td className="border border-gray-300 px-3 py-2 text-gray-800">{site?.name || '不明'}</td>
                             <td className="border border-gray-300 px-3 py-2 text-gray-800 truncate max-w-xs">{finding.description}</td>
                           </tr>
@@ -523,7 +527,7 @@ export default function MonthlyReport() {
             {/* 4. 手入力欄 */}
             <div className="space-y-6 print:break-inside-avoid">
               <h2 className="text-xl font-bold text-gray-800 mb-4 border-l-4 border-blue-600 pl-3">所見・コメント</h2>
-              
+
               <div className="bg-gray-50 p-4 rounded-xl border border-gray-200 print:bg-transparent print:border-gray-300 print:p-2">
                 <label className="block text-sm font-bold text-gray-700 mb-2 print:text-gray-900">今月の傾向</label>
                 <textarea
@@ -577,18 +581,12 @@ export default function MonthlyReport() {
                         <tr key={finding.id} className="align-top">
                           <td className="border border-gray-300 px-2 py-2 text-gray-800">{finding.patrolDate ? format(parseISO(finding.patrolDate), 'MM/dd') : '-'}</td>
                           <td className="border border-gray-300 px-2 py-2 text-gray-800 break-words">{finding.categoryMajor || '未分類'}</td>
-                      <th className="border border-gray-300 px-2 py-2 text-left font-semibold text-gray-700 w-24">是正期限</th>
-                      <th className="border border-gray-300 px-2 py-2 text-left font-semibold text-gray-700">指摘内容</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {selectedSiteFindings.length > 0 ? (
-                      selectedSiteFindings.map(finding => (
-                        <tr key={finding.id} className="align-top">
-                          <td className="border border-gray-300 px-2 py-2 text-gray-800">{finding.patrolDate ? format(parseISO(finding.patrolDate), 'MM/dd') : '-'}</td>
-                          <td className="border border-gray-300 px-2 py-2 text-gray-800 break-words">{finding.categoryMajor || '未分類'}</td>
-                          <td className={cn('border border-gray-300 px-2 py-2 break-words', finding.status === '未対応' ? 'text-red-600 font-semibold' : 'text-gray-800')}>{finding.status || '-'}</td>
-                          <td className="border border-gray-300 px-2 py-2 text-gray-800 break-words">{finding.urgency === '次回是正' ? '次回是正' : (finding.deadline ? format(parseISO(finding.deadline), 'yyyy/MM/dd') : '-')}</td>
+                          <td className={cn('border border-gray-300 px-2 py-2 break-words', finding.status === '未対応' ? 'text-red-600 font-semibold' : 'text-gray-800')}>
+                            {finding.status || '-'}
+                          </td>
+                          <td className="border border-gray-300 px-2 py-2 text-gray-800 break-words">
+                            {finding.urgency === '次回是正' ? '次回是正' : (finding.deadline ? format(parseISO(finding.deadline), 'yyyy/MM/dd') : '-')}
+                          </td>
                           <td className="border border-gray-300 px-2 py-2 text-gray-800 whitespace-pre-wrap break-words">{finding.description || '（記載なし）'}</td>
                         </tr>
                       ))
@@ -601,7 +599,6 @@ export default function MonthlyReport() {
                 </table>
               </div>
             )}
-
           </div>
         ) : (
           <div className="flex flex-col items-center justify-center h-full text-gray-500 print:hidden">
