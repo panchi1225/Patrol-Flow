@@ -3,6 +3,7 @@ import { useParams, Link, useNavigate, useLocation } from 'react-router-dom';
 import { doc, collection, query, where, onSnapshot, addDoc, updateDoc, deleteDoc, getDocs } from 'firebase/firestore';
 import { db, handleFirestoreError, OperationType, uploadPhoto } from '../lib/firebase';
 import { canUseFieldFeatures, canUseSafetyFeatures } from '../lib/permissions';
+import { FINDING_STATUSES, FINDING_TYPES, isCorrectionRequired } from '../lib/findings';
 import { useAuth } from '../contexts/AuthContext';
 import { ArrowLeft, AlertCircle, CheckCircle, Clock, MapPin, FileText, User, Camera, X, Trash2 } from 'lucide-react';
 import { format, parseISO, isPast } from 'date-fns';
@@ -195,6 +196,10 @@ const FindingDetail: React.FC = () => {
       setActionError('この操作を実行する権限がありません。');
       return;
     }
+    if (finding && !isCorrectionRequired(finding)) {
+      setActionError('この指摘区分は是正対応の登録対象外です。');
+      return;
+    }
 
     setSubmitting(true);
     setActionError(null);
@@ -312,15 +317,16 @@ const FindingDetail: React.FC = () => {
   };
   const openEditModal = () => {
     if (!finding) return;
+    const requiresCorrection = isCorrectionRequired(finding);
     setEditForm({
       type: finding.type ?? '是正指示',
       urgency: finding.urgency ?? '早期是正',
       description: finding.description ?? '',
       location: finding.location ?? '',
-      correctionInstruction: finding.correctionInstruction ?? '',
-      deadline: finding.deadline ?? '',
+      correctionInstruction: requiresCorrection ? finding.correctionInstruction ?? '' : '',
+      deadline: requiresCorrection ? finding.deadline ?? '' : '',
       notes: finding.notes ?? '',
-      status: finding.status ?? '未対応',
+      status: requiresCorrection ? finding.status ?? FINDING_STATUSES.NOT_STARTED : FINDING_STATUSES.NOT_APPLICABLE,
       categoryMajor: finding.categoryMinor ?? finding.categoryMajor ?? '',
     });
     setIsEditModalOpen(true);
@@ -331,15 +337,16 @@ const FindingDetail: React.FC = () => {
     if (!findingId || !canUseSafetyFeatures(profile?.role)) return;
     setSubmitting(true);
     try {
+      const editRequiresCorrection = editForm.type === FINDING_TYPES.CORRECTION;
       await updateDoc(doc(db, 'findings', findingId), {
         type: editForm.type,
-        urgency: editForm.type === '是正指示' ? editForm.urgency : 'なし',
+        urgency: editRequiresCorrection ? editForm.urgency : 'なし',
         description: editForm.description,
         location: editForm.location,
-        correctionInstruction: editForm.correctionInstruction,
-        deadline: editForm.type === '是正指示' && editForm.urgency !== '次回是正' ? (editForm.deadline || null) : null,
+        correctionInstruction: editRequiresCorrection ? editForm.correctionInstruction : '',
+        deadline: editRequiresCorrection && editForm.urgency !== '次回是正' ? (editForm.deadline || null) : null,
         notes: editForm.notes,
-        status: editForm.status,
+        status: editRequiresCorrection ? editForm.status : FINDING_STATUSES.NOT_APPLICABLE,
         categoryMajor: editForm.categoryMajor,
         categoryMinor: editForm.categoryMajor,
         categoryMiddle: null,
@@ -356,8 +363,11 @@ const FindingDetail: React.FC = () => {
   if (loading) return <div className="p-8 text-center text-gray-500">読み込み中...</div>;
   if (!finding) return <div className="p-8 text-center text-red-500">指摘事項が見つかりません。</div>;
 
-  const isOverdue = finding.deadline && isPast(parseISO(finding.deadline)) && finding.status !== '完了';
+  const requiresCorrection = isCorrectionRequired(finding);
+  const displayStatus = requiresCorrection ? finding.status : FINDING_STATUSES.NOT_APPLICABLE;
+  const isOverdue = requiresCorrection && finding.deadline && isPast(parseISO(finding.deadline)) && finding.status !== FINDING_STATUSES.COMPLETED;
   const displayCategory = finding.categoryMinor || finding.categoryMajor;
+  const editRequiresCorrection = editForm.type === FINDING_TYPES.CORRECTION;
 
   const handleBack = (e: React.MouseEvent) => {
     e.preventDefault();
@@ -395,21 +405,22 @@ const FindingDetail: React.FC = () => {
             <div>
               <div className="flex items-center space-x-3 mb-1">
                 <span className={`px-3 py-1 text-xs font-medium rounded-full ${
-                  finding.status === '未対応' ? 'bg-red-100 text-red-700' :
-                  finding.status === '対応中' ? 'bg-blue-100 text-blue-700' :
-                  finding.status === '確認待ち' ? 'bg-yellow-100 text-yellow-700' :
+                  displayStatus === FINDING_STATUSES.NOT_STARTED ? 'bg-red-100 text-red-700' :
+                  displayStatus === FINDING_STATUSES.IN_PROGRESS ? 'bg-blue-100 text-blue-700' :
+                  displayStatus === FINDING_STATUSES.WAITING_CONFIRMATION ? 'bg-yellow-100 text-yellow-700' :
+                  displayStatus === FINDING_STATUSES.NOT_APPLICABLE ? 'bg-gray-100 text-gray-700' :
                   'bg-green-100 text-green-700'
                 }`}>
-                  {finding.status}
+                  {displayStatus}
                 </span>
                 <span className="px-3 py-1 text-xs font-medium rounded-full bg-gray-100 text-gray-700">
                   {finding.type}
                 </span>
-                {finding.urgency === '即時是正' && (
+                {requiresCorrection && finding.urgency && finding.urgency !== 'なし' && (
                   <span className={`px-3 py-1 text-xs font-medium rounded-full ${
-                    'bg-red-100 text-red-700 border border-red-200'
+                    finding.urgency === '即時是正' ? 'bg-red-100 text-red-700 border border-red-200' : 'bg-gray-100 text-gray-700'
                   }`}>
-                    即時是正
+                    {finding.urgency}
                   </span>
                 )}
                 {isOverdue && (
@@ -426,7 +437,7 @@ const FindingDetail: React.FC = () => {
 
       <div className="space-y-6">
         <div className="bg-white rounded-2xl shadow-sm border border-gray-100 p-6 md:p-8">
-          <h2 className="text-xl font-bold text-gray-900 mb-6 border-b pb-2">{finding.type === '好事例' ? '好事例詳細' : '指摘詳細'}</h2>
+          <h2 className="text-xl font-bold text-gray-900 mb-6 border-b pb-2">{finding.type === FINDING_TYPES.GOOD_PRACTICE ? '好事例詳細' : '指摘詳細'}</h2>
           <div className="grid grid-cols-1 xl:grid-cols-2 gap-6">
             {finding.location && (
               <div>
@@ -437,7 +448,7 @@ const FindingDetail: React.FC = () => {
                 </p>
               </div>
             )}
-            {(finding.urgency === '次回是正' || finding.deadline) && (
+            {requiresCorrection && (finding.urgency === '次回是正' || finding.deadline) && (
               <div>
                 <p className="text-sm text-gray-500 mb-1">是正期限</p>
                 <p className={`font-medium flex items-center ${isOverdue ? 'text-red-600' : 'text-gray-900'}`}>
@@ -458,7 +469,7 @@ const FindingDetail: React.FC = () => {
                 </div>
               </div>
             )}
-            {finding.correctionInstruction && (
+            {requiresCorrection && finding.correctionInstruction && (
               <div className="lg:col-span-2">
                 <p className="text-sm text-gray-500 mb-1">是正内容（指示）</p>
                 <p className="font-medium text-gray-900 bg-red-50 p-4 rounded-xl border border-red-100">
@@ -487,12 +498,12 @@ const FindingDetail: React.FC = () => {
           </div>
         </div>
 
-        {finding.type !== '好事例' && (
+        {requiresCorrection && (
           <>
             <div className="bg-white rounded-2xl shadow-sm border border-gray-100 p-6 md:p-8">
               <div className="flex items-center justify-between mb-6 border-b pb-2">
                 <h2 className="text-xl font-bold text-gray-900">是正対応履歴</h2>
-                {canUseFieldFeatures(profile?.role) && finding.status !== '完了' && (
+                {canUseFieldFeatures(profile?.role) && finding.status !== FINDING_STATUSES.COMPLETED && (
                   <button 
                     onClick={() => setIsActionModalOpen(true)}
                     className="bg-blue-600 text-white px-4 py-2 rounded-lg text-sm font-medium hover:bg-blue-700 transition-colors shadow-sm"
@@ -535,7 +546,7 @@ const FindingDetail: React.FC = () => {
             <div className="bg-white rounded-2xl shadow-sm border border-gray-100 p-6 md:p-8">
               <div className="flex items-center justify-between mb-6 border-b pb-2">
                 <h2 className="text-xl font-bold text-gray-900">是正確認履歴</h2>
-                {canUseSafetyFeatures(profile?.role) && finding.status !== '完了' && actions.length > 0 && (
+                {canUseSafetyFeatures(profile?.role) && finding.status !== FINDING_STATUSES.COMPLETED && actions.length > 0 && (
                   <button 
                     onClick={() => setIsConfirmationModalOpen(true)}
                     className="bg-green-600 text-white px-4 py-2 rounded-lg text-sm font-medium hover:bg-green-700 transition-colors shadow-sm"
@@ -676,11 +687,13 @@ const FindingDetail: React.FC = () => {
                   const nextType = e.target.value;
                   setEditForm(prev => ({
                     ...prev,
-                    type: nextType,
-                    urgency: nextType === '是正指示' ? prev.urgency : 'なし',
-                    correctionInstruction: nextType === '是正指示' ? prev.correctionInstruction : '',
-                    deadline: nextType === '是正指示' ? prev.deadline : '',
-                    status: nextType === '注意喚起' ? (prev.status === '対象外' ? '未対応' : prev.status) : prev.status,
+                  type: nextType,
+                    urgency: nextType === FINDING_TYPES.CORRECTION ? prev.urgency : 'なし',
+                    correctionInstruction: nextType === FINDING_TYPES.CORRECTION ? prev.correctionInstruction : '',
+                    deadline: nextType === FINDING_TYPES.CORRECTION ? prev.deadline : '',
+                    status: nextType === FINDING_TYPES.CORRECTION
+                      ? (prev.status === FINDING_STATUSES.NOT_APPLICABLE ? FINDING_STATUSES.NOT_STARTED : prev.status)
+                      : FINDING_STATUSES.NOT_APPLICABLE,
                   }));
                 }}
                 className="w-full px-4 py-3 border border-gray-300 rounded-xl"
@@ -688,7 +701,7 @@ const FindingDetail: React.FC = () => {
                 <option value="是正指示">是正指示</option>
                 <option value="注意喚起">注意喚起</option>
               </select>
-              {editForm.type === '是正指示' && (
+              {editRequiresCorrection && (
                 <select
                   value={editForm.urgency}
                   onChange={(e) => setEditForm(prev => ({ ...prev, urgency: e.target.value }))}
@@ -713,11 +726,15 @@ const FindingDetail: React.FC = () => {
                 ))}
               </select>
               <input value={editForm.location} onChange={(e) => setEditForm(prev => ({ ...prev, location: e.target.value }))} placeholder="発生場所" className="w-full px-4 py-3 border border-gray-300 rounded-xl" />
-              {editForm.type === '是正指示' && <textarea rows={3} value={editForm.correctionInstruction} onChange={(e) => setEditForm(prev => ({ ...prev, correctionInstruction: e.target.value }))} placeholder="是正内容（指示）" className="w-full px-4 py-3 border border-gray-300 rounded-xl" />}
-              {editForm.type === '是正指示' && editForm.urgency !== '次回是正' && <input type="date" value={editForm.deadline} onChange={(e) => setEditForm(prev => ({ ...prev, deadline: e.target.value }))} className="w-full px-4 py-3 border border-gray-300 rounded-xl" />}
-              <select value={editForm.status} onChange={(e) => setEditForm(prev => ({ ...prev, status: e.target.value }))} className="w-full px-4 py-3 border border-gray-300 rounded-xl">
-                <option value="未対応">未対応</option><option value="対応中">対応中</option><option value="確認待ち">確認待ち</option><option value="完了">完了</option><option value="対象外">対象外</option>
-              </select>
+              {editRequiresCorrection && <textarea rows={3} value={editForm.correctionInstruction} onChange={(e) => setEditForm(prev => ({ ...prev, correctionInstruction: e.target.value }))} placeholder="是正内容（指示）" className="w-full px-4 py-3 border border-gray-300 rounded-xl" />}
+              {editRequiresCorrection && editForm.urgency !== '次回是正' && <input type="date" value={editForm.deadline} onChange={(e) => setEditForm(prev => ({ ...prev, deadline: e.target.value }))} className="w-full px-4 py-3 border border-gray-300 rounded-xl" />}
+              {editRequiresCorrection ? (
+                <select value={editForm.status} onChange={(e) => setEditForm(prev => ({ ...prev, status: e.target.value }))} className="w-full px-4 py-3 border border-gray-300 rounded-xl">
+                  <option value="未対応">未対応</option><option value="対応中">対応中</option><option value="確認待ち">確認待ち</option><option value="完了">完了</option>
+                </select>
+              ) : (
+                <input value={FINDING_STATUSES.NOT_APPLICABLE} disabled className="w-full px-4 py-3 border border-gray-300 rounded-xl bg-gray-50 text-gray-500" />
+              )}
               <textarea rows={3} value={editForm.notes} onChange={(e) => setEditForm(prev => ({ ...prev, notes: e.target.value }))} placeholder="備考" className="w-full px-4 py-3 border border-gray-300 rounded-xl" />
               <div className="flex justify-end gap-3">
                 <button type="button" onClick={() => setIsEditModalOpen(false)} className="px-4 py-2 border border-gray-300 rounded-lg">キャンセル</button>

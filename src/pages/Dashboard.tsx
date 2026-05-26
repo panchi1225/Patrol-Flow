@@ -2,6 +2,7 @@ import React, { useEffect, useState } from 'react';
 import { collection, query, where, getDocs, onSnapshot } from 'firebase/firestore';
 import { db, handleFirestoreError, OperationType } from '../lib/firebase';
 import { canUseSafetyFeatures } from '../lib/permissions';
+import { ACTIVE_CORRECTION_STATUSES, isCorrectionRequired } from '../lib/findings';
 import { useAuth } from '../contexts/AuthContext';
 import { Link } from 'react-router-dom';
 import { AlertTriangle, CheckCircle, Clock, FileText } from 'lucide-react';
@@ -22,7 +23,7 @@ const Dashboard: React.FC = () => {
     const findingsRef = collection(db, 'findings');
     const patrolsRef = collection(db, 'patrols');
 
-    const qFindings = query(findingsRef, where('status', 'in', ['未対応', '対応中', '確認待ち', '再是正']));
+    const qFindings = query(findingsRef, where('status', 'in', [...ACTIVE_CORRECTION_STATUSES]));
     
     const unsubscribeFindings = onSnapshot(qFindings, (snapshot) => {
       let incomplete = 0;
@@ -31,7 +32,7 @@ const Dashboard: React.FC = () => {
 
       snapshot.forEach((doc) => {
         const data = doc.data();
-        if (data.type === '好事例') return;
+        if (!isCorrectionRequired(data)) return;
         
         incomplete++;
         if (data.deadline && isPast(parseISO(data.deadline))) {

@@ -1,6 +1,7 @@
 import React, { useState, useEffect, useMemo } from 'react';
 import { collection, getDocs } from 'firebase/firestore';
 import { db, handleFirestoreError, OperationType } from '../lib/firebase';
+import { FINDING_STATUSES, isCorrectionRequired } from '../lib/findings';
 import { BarChart3, AlertCircle, CheckCircle, Clock, Repeat, Star, Filter } from 'lucide-react';
 import {
   BarChart,
@@ -92,20 +93,23 @@ const Analytics: React.FC = () => {
 
   // --- 基本集計データ ---
   const totalCount = filteredFindings.length;
-  const incompleteCount = filteredFindings.filter(f => f.status !== '完了').length;
-  const recurrenceCount = filteredFindings.filter(f => f.isRecurrence).length;
+  const correctionFindings = useMemo(
+    () => filteredFindings.filter(isCorrectionRequired),
+    [filteredFindings],
+  );
+  const incompleteCount = correctionFindings.filter(f => f.status !== FINDING_STATUSES.COMPLETED).length;
+  const recurrenceCount = correctionFindings.filter(f => f.isRecurrence).length;
   const goodPracticeCount = filteredFindings.filter(f => f.type === '好事例').length;
   
   const today = new Date().toISOString().split('T')[0];
-  const overdueCount = filteredFindings.filter(f => 
-    f.type === '是正指示' && 
-    f.status !== '完了' && 
+  const overdueCount = correctionFindings.filter(f =>
+    f.status !== FINDING_STATUSES.COMPLETED &&
     f.deadline && 
     f.deadline < today
   ).length;
 
-  const completedCount = filteredFindings.filter(f => f.status === '完了').length;
-  const completionRate = totalCount > 0 ? Math.round((completedCount / totalCount) * 100) : 0;
+  const completedCount = correctionFindings.filter(f => f.status === FINDING_STATUSES.COMPLETED).length;
+  const completionRate = correctionFindings.length > 0 ? Math.round((completedCount / correctionFindings.length) * 100) : 0;
 
   // --- グラフ用データ生成 ---
   const monthlyData = useMemo(() => {
@@ -142,13 +146,13 @@ const Analytics: React.FC = () => {
 
   const statusData = useMemo(() => {
     const counts: Record<string, number> = {};
-    filteredFindings.forEach(f => {
+    correctionFindings.forEach(f => {
       if (f.status) counts[f.status] = (counts[f.status] || 0) + 1;
     });
     return Object.entries(counts)
       .sort(([, a], [, b]) => b - a)
       .map(([name, count]) => ({ name, count }));
-  }, [filteredFindings]);
+  }, [correctionFindings]);
 
   const recurrenceCategoryData = useMemo(() => {
     const counts: Record<string, number> = {};
@@ -162,14 +166,14 @@ const Analytics: React.FC = () => {
 
   const overdueSiteData = useMemo(() => {
     const counts: Record<string, number> = {};
-    filteredFindings.filter(f => f.type === '是正指示' && f.status !== '完了' && f.deadline && f.deadline < today).forEach(f => {
+    correctionFindings.filter(f => f.status !== FINDING_STATUSES.COMPLETED && f.deadline && f.deadline < today).forEach(f => {
       const siteName = sites.find(s => s.id === f.siteId)?.name || '不明';
       counts[siteName] = (counts[siteName] || 0) + 1;
     });
     return Object.entries(counts)
       .sort(([, a], [, b]) => b - a)
       .map(([name, count]) => ({ name, count }));
-  }, [filteredFindings, sites, today]);
+  }, [correctionFindings, sites, today]);
 
   // フィルター用の選択肢
   const periods = Array.from(new Set(findings.map(f => f.createdAt.substring(0, 7)))).sort().reverse();

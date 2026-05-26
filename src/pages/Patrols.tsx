@@ -2,6 +2,7 @@ import React, { useEffect, useState } from 'react';
 import { collection, onSnapshot, query, orderBy } from 'firebase/firestore';
 import { db, handleFirestoreError, OperationType } from '../lib/firebase';
 import { canUseSafetyFeatures } from '../lib/permissions';
+import { FINDING_STATUSES, isCorrectionRequired } from '../lib/findings';
 import { useAuth } from '../contexts/AuthContext';
 import { Link } from 'react-router-dom';
 import { Plus, ClipboardList, MapPin, Calendar, User } from 'lucide-react';
@@ -19,7 +20,8 @@ interface Patrol {
 interface Finding {
   id: string;
   patrolId: string;
-  status: '未対応' | '確認待ち' | '再是正' | '完了';
+  type?: string;
+  status: string;
 }
 
 interface Site {
@@ -30,14 +32,19 @@ interface Site {
 
 const getStatusDisplay = (patrolId: string, findings: Finding[]) => {
   const patrolFindings = findings.filter(f => f.patrolId === patrolId);
+  const correctionFindings = patrolFindings.filter(isCorrectionRequired);
   
   if (patrolFindings.length === 0) {
     return { label: '指摘事項なし', className: 'bg-gray-100 text-gray-700' };
   }
 
-  const hasUnresolved = patrolFindings.some(f => f.status === '未対応');
-  const hasPending = patrolFindings.some(f => f.status === '確認待ち' || f.status === '再是正');
-  const allCompleted = patrolFindings.every(f => f.status === '完了');
+  if (correctionFindings.length === 0) {
+    return { label: '是正対応対象なし', className: 'bg-gray-100 text-gray-700' };
+  }
+
+  const hasUnresolved = correctionFindings.some(f => f.status === FINDING_STATUSES.NOT_STARTED);
+  const hasPending = correctionFindings.some(f => f.status === FINDING_STATUSES.WAITING_CONFIRMATION || f.status === FINDING_STATUSES.REWORK);
+  const allCompleted = correctionFindings.every(f => f.status === FINDING_STATUSES.COMPLETED);
 
   if (hasUnresolved) {
     return { label: '是正対応未実施', className: 'bg-red-100 text-red-700' };

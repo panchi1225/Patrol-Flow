@@ -1,6 +1,7 @@
 import React, { useEffect, useState } from 'react';
 import { collection, onSnapshot, query, where, orderBy } from 'firebase/firestore';
 import { db, handleFirestoreError, OperationType } from '../lib/firebase';
+import { ACTIVE_CORRECTION_STATUSES, isCorrectionRequired } from '../lib/findings';
 import { useAuth } from '../contexts/AuthContext';
 import { Link, useSearchParams } from 'react-router-dom';
 import { AlertCircle, Clock, MapPin, FileText, Filter } from 'lucide-react';
@@ -62,13 +63,15 @@ const IncompleteFindings: React.FC = () => {
 
     const qFindings = query(
       collection(db, 'findings'),
-      where('status', 'in', ['未対応', '対応中', '確認待ち', '再是正'])
+      where('status', 'in', [...ACTIVE_CORRECTION_STATUSES])
     );
 
     const unsubscribeFindings = onSnapshot(qFindings, (snapshot) => {
       const findingData: Finding[] = [];
       snapshot.forEach((doc) => {
-        findingData.push({ id: doc.id, ...doc.data() } as Finding);
+        const data = doc.data();
+        if (!isCorrectionRequired(data)) return;
+        findingData.push({ id: doc.id, ...data } as Finding);
       });
       findingData.sort(sortFindings);
       setFindings(findingData);

@@ -3,6 +3,7 @@ import { useParams, Link, useNavigate } from 'react-router-dom';
 import { doc, getDoc, collection, query, where, onSnapshot, deleteDoc, getDocs, updateDoc } from 'firebase/firestore';
 import { db, handleFirestoreError, OperationType } from '../lib/firebase';
 import { canUseSafetyFeatures } from '../lib/permissions';
+import { FINDING_STATUSES, isCorrectionRequired } from '../lib/findings';
 import { useAuth } from '../contexts/AuthContext';
 import { ClipboardList, Calendar, User, ArrowLeft, MapPin, Plus, AlertCircle, Trash2, Save, Pencil, X } from 'lucide-react';
 import { format, parseISO } from 'date-fns';
@@ -262,46 +263,52 @@ const PatrolDetail: React.FC = () => {
           </div>
           
           <div className="space-y-4">
-            {issues.map(finding => (
-              <Link key={finding.id} to={`/findings/${finding.id}`} className="block border border-gray-200 rounded-xl p-5 hover:bg-gray-50 transition-colors group">
-                <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
-                  <div className="flex-1">
-                    <div className="flex flex-wrap items-center gap-2 mb-2">
-                      <span className={`px-2 py-1 text-xs font-medium rounded-full ${
-                        finding.status === '未対応' ? 'bg-red-100 text-red-700' :
-                        finding.status === '対応中' ? 'bg-blue-100 text-blue-700' :
-                        finding.status === '確認待ち' ? 'bg-yellow-100 text-yellow-700' :
-                        'bg-green-100 text-green-700'
-                      }`}>
-                        {finding.status}
-                      </span>
-                      <span className="px-2 py-1 text-xs font-medium rounded-full bg-gray-100 text-gray-700">
-                        {finding.type}
-                      </span>
-                      {finding.urgency && finding.urgency !== 'なし' && (
+            {issues.map(finding => {
+              const requiresCorrection = isCorrectionRequired(finding);
+              const displayStatus = requiresCorrection ? finding.status : FINDING_STATUSES.NOT_APPLICABLE;
+
+              return (
+                <Link key={finding.id} to={`/findings/${finding.id}`} className="block border border-gray-200 rounded-xl p-5 hover:bg-gray-50 transition-colors group">
+                  <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+                    <div className="flex-1">
+                      <div className="flex flex-wrap items-center gap-2 mb-2">
                         <span className={`px-2 py-1 text-xs font-medium rounded-full ${
-                          finding.urgency === '即時是正' ? 'bg-red-100 text-red-700 border border-red-200' :
-                          'bg-gray-100 text-gray-700'
+                          displayStatus === FINDING_STATUSES.NOT_STARTED ? 'bg-red-100 text-red-700' :
+                          displayStatus === FINDING_STATUSES.IN_PROGRESS ? 'bg-blue-100 text-blue-700' :
+                          displayStatus === FINDING_STATUSES.WAITING_CONFIRMATION ? 'bg-yellow-100 text-yellow-700' :
+                          displayStatus === FINDING_STATUSES.NOT_APPLICABLE ? 'bg-gray-100 text-gray-700' :
+                          'bg-green-100 text-green-700'
                         }`}>
-                          {finding.urgency}
+                          {displayStatus}
                         </span>
+                        <span className="px-2 py-1 text-xs font-medium rounded-full bg-gray-100 text-gray-700">
+                          {finding.type}
+                        </span>
+                        {requiresCorrection && finding.urgency && finding.urgency !== 'なし' && (
+                          <span className={`px-2 py-1 text-xs font-medium rounded-full ${
+                            finding.urgency === '即時是正' ? 'bg-red-100 text-red-700 border border-red-200' :
+                            'bg-gray-100 text-gray-700'
+                          }`}>
+                            {finding.urgency}
+                          </span>
+                        )}
+                      </div>
+                      <p className="text-gray-900 font-bold text-lg line-clamp-2 mb-2 group-hover:text-blue-600 transition-colors">{finding.description}</p>
+
+                      {requiresCorrection && finding.deadline && (
+                        <div className="flex items-center text-sm text-gray-500">
+                          <Calendar size={14} className="mr-1" />
+                          期限: {format(parseISO(finding.deadline), 'yyyy/MM/dd')}
+                        </div>
                       )}
                     </div>
-                    <p className="text-gray-900 font-bold text-lg line-clamp-2 mb-2 group-hover:text-blue-600 transition-colors">{finding.description}</p>
-                    
-                    {finding.deadline && (
-                      <div className="flex items-center text-sm text-gray-500">
-                        <Calendar size={14} className="mr-1" />
-                        期限: {format(parseISO(finding.deadline), 'yyyy/MM/dd')}
-                      </div>
-                    )}
+                    <div className="hidden sm:flex text-blue-600 font-medium text-sm whitespace-nowrap">
+                      詳細 &rarr;
+                    </div>
                   </div>
-                  <div className="hidden sm:flex text-blue-600 font-medium text-sm whitespace-nowrap">
-                    詳細 &rarr;
-                  </div>
-                </div>
-              </Link>
-            ))}
+                </Link>
+              );
+            })}
             {issues.length === 0 && (
               <div className="text-center py-8">
                 <AlertCircle className="mx-auto text-gray-400 mb-2" size={32} />

@@ -3,6 +3,7 @@ import { useNavigate, useParams } from 'react-router-dom';
 import { collection, addDoc, doc, getDoc, query, where, getDocs, orderBy, limit } from 'firebase/firestore';
 import { db, handleFirestoreError, OperationType, uploadPhoto } from '../lib/firebase';
 import { useAuth } from '../contexts/AuthContext';
+import { FINDING_STATUSES, FINDING_TYPES } from '../lib/findings';
 import { ArrowLeft, Save, MapPin, Calendar, Camera, Info, X, AlertCircle, Repeat } from 'lucide-react';
 import { format, addDays, parseISO } from 'date-fns';
 
@@ -45,7 +46,7 @@ const FindingNew: React.FC = () => {
   const [majors, setMajors] = useState<Category[]>([]);
 
   const [formData, setFormData] = useState({
-    type: '是正指示',
+    type: FINDING_TYPES.CORRECTION,
     urgency: '早期是正',
     categoryMajor: '',
     categoryMinor: '',
@@ -57,7 +58,7 @@ const FindingNew: React.FC = () => {
     notes: '',
     isRecurrence: false,
     repeatSourceId: '',
-    status: '未対応',
+    status: FINDING_STATUSES.NOT_STARTED,
   });
 
   useEffect(() => {
@@ -109,7 +110,7 @@ const FindingNew: React.FC = () => {
 
   useEffect(() => {
     const searchPastFindings = async () => {
-      if (!siteId || !formData.categoryMinor || formData.categoryMinor === 'その他') {
+      if (formData.type !== FINDING_TYPES.CORRECTION || !siteId || !formData.categoryMinor || formData.categoryMinor === 'その他') {
         setPastFindings([]);
         setSelectedPastFindingId('');
         setFormData(prev => ({ ...prev, isRecurrence: false, repeatSourceId: '' }));
@@ -152,7 +153,7 @@ const FindingNew: React.FC = () => {
     };
 
     searchPastFindings();
-  }, [siteId, formData.categoryMinor]);
+  }, [siteId, formData.type, formData.categoryMinor]);
 
   const handleChange = (e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement | HTMLTextAreaElement>) => {
     const { name, value, type } = e.target;
@@ -165,24 +166,24 @@ const FindingNew: React.FC = () => {
       };
 
       if (name === 'type') {
-        if (value === '好事例') {
+        if (value === FINDING_TYPES.GOOD_PRACTICE) {
           newData.urgency = 'なし';
           newData.deadline = '';
           newData.correctionInstruction = '';
-          newData.status = '対象外';
+          newData.status = FINDING_STATUSES.NOT_APPLICABLE;
           newData.isRecurrence = false;
           newData.repeatSourceId = '';
-        } else if (value === '注意喚起') {
+        } else if (value === FINDING_TYPES.NOTICE) {
           newData.urgency = 'なし';
           newData.deadline = '';
           newData.correctionInstruction = '';
-          newData.status = '未対応';
+          newData.status = FINDING_STATUSES.NOT_APPLICABLE;
           newData.isRecurrence = false;
           newData.repeatSourceId = '';
-        } else if (value === '是正指示' && prev.type !== '是正指示') {
+        } else if (value === FINDING_TYPES.CORRECTION && prev.type !== FINDING_TYPES.CORRECTION) {
           newData.urgency = '早期是正';
           newData.deadline = format(addDays(new Date(), 7), 'yyyy-MM-dd');
-          newData.status = '未対応';
+          newData.status = FINDING_STATUSES.NOT_STARTED;
         }
       }
 
@@ -291,6 +292,13 @@ const FindingNew: React.FC = () => {
       setSubmitStatus('Firestoreへ保存中...');
 
       const saveFormData = { ...formData };
+      if (saveFormData.type !== FINDING_TYPES.CORRECTION) {
+        saveFormData.urgency = 'なし';
+        saveFormData.deadline = '';
+        saveFormData.correctionInstruction = '';
+        saveFormData.status = FINDING_STATUSES.NOT_APPLICABLE;
+        saveFormData.isRecurrence = false;
+      }
       if (!saveFormData.isRecurrence) {
         delete (saveFormData as any).repeatSourceId;
       }
@@ -323,8 +331,8 @@ const FindingNew: React.FC = () => {
     }
   };
 
-  const isCorrection = formData.type === '是正指示';
-  const isGoodPractice = formData.type === '好事例';
+  const isCorrection = formData.type === FINDING_TYPES.CORRECTION;
+  const isGoodPractice = formData.type === FINDING_TYPES.GOOD_PRACTICE;
 
   const categoryOptions = Array.from(new Set([...majors.map(m => m.name), 'その他']));
 
@@ -371,16 +379,16 @@ const FindingNew: React.FC = () => {
                 onChange={handleChange}
                 className="w-full px-4 py-3 border border-gray-300 rounded-xl focus:ring-2 focus:ring-blue-500 focus:border-blue-500 bg-gray-50"
               >
-                <option value="是正指示">是正指示</option>
-                <option value="注意喚起">注意喚起</option>
-                <option value="好事例">好事例</option>
+                <option value={FINDING_TYPES.CORRECTION}>是正指示</option>
+                <option value={FINDING_TYPES.NOTICE}>注意喚起</option>
+                <option value={FINDING_TYPES.GOOD_PRACTICE}>好事例</option>
               </select>
               <div className="text-xs text-gray-500 flex items-start mt-1">
                 <Info size={14} className="mr-1 shrink-0 mt-0.5" />
                 <span>
-                  {formData.type === '是正指示' && '対応が必要な指摘。期限管理の対象となります。'}
-                  {formData.type === '注意喚起' && '周知・再注意を目的とする事項です。'}
-                  {formData.type === '好事例' && '良い取り組みの記録です。是正対応は不要です。'}
+                  {formData.type === FINDING_TYPES.CORRECTION && '対応が必要な指摘。期限管理の対象となります。'}
+                  {formData.type === FINDING_TYPES.NOTICE && '周知・再注意を目的とする事項です。是正対応は不要です。'}
+                  {formData.type === FINDING_TYPES.GOOD_PRACTICE && '良い取り組みの記録です。是正対応は不要です。'}
                 </span>
               </div>
             </div>
@@ -466,7 +474,7 @@ const FindingNew: React.FC = () => {
           </div>
         </section>
 
-        {!isGoodPractice && pastFindings.length > 0 && (
+        {isCorrection && pastFindings.length > 0 && (
           <section className="bg-amber-50 rounded-2xl shadow-sm border border-amber-200 p-6 md:p-8">
             <div className="flex items-start mb-4">
               <Repeat className="text-amber-600 mr-2 shrink-0 mt-0.5" size={20} />

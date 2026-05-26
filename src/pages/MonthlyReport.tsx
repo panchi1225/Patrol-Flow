@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { collection, getDocs, query, where, orderBy } from 'firebase/firestore';
 import { db } from '../lib/firebase';
+import { isCorrectionRequired } from '../lib/findings';
 import { format, parseISO, endOfMonth, isBefore } from 'date-fns';
 import { Printer, FileText, AlertCircle, Clock, Repeat, ThumbsUp, MapPin, Calendar, Search } from 'lucide-react';
 import { cn } from '../components/Layout';
@@ -132,9 +133,10 @@ export default function MonthlyReport() {
 
     const { findings } = reportData;
     const issues = findings.filter(f => f.type !== '好事例');
+    const correctionFindings = findings.filter(isCorrectionRequired);
     const totalFindings = issues.length;
-    const uncompletedFindings = issues.filter(f => f.status !== '完了');
-    const completedFindings = issues.filter(f => f.status === '完了');
+    const uncompletedFindings = correctionFindings.filter(f => f.status !== '完了');
+    const completedFindings = correctionFindings.filter(f => f.status === '完了');
 
     // 期限超過
     const today = format(new Date(), 'yyyy-MM-dd');
@@ -143,14 +145,14 @@ export default function MonthlyReport() {
     );
 
     // 再発
-    const recurringFindings = issues.filter(f => f.isRecurrence);
+    const recurringFindings = correctionFindings.filter(f => f.isRecurrence);
 
     // 好事例
     const goodPractices = findings.filter(f => f.type === '好事例');
 
     // 是正確認済率
-    const completionRate = totalFindings > 0
-      ? Math.round((completedFindings.length / totalFindings) * 100)
+    const completionRate = correctionFindings.length > 0
+      ? Math.round((completedFindings.length / correctionFindings.length) * 100)
       : 0;
 
     // 分類別件数
@@ -169,7 +171,7 @@ export default function MonthlyReport() {
     }, {} as Record<string, number>);
 
     // 状態別件数
-    const statusCounts = issues.reduce((acc, curr) => {
+    const statusCounts = correctionFindings.reduce((acc, curr) => {
       acc[curr.status] = (acc[curr.status] || 0) + 1;
       return acc;
     }, {} as Record<string, number>);

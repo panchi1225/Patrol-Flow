@@ -1,6 +1,7 @@
 import React, { useEffect, useState } from 'react';
 import { collection, onSnapshot, query, where, orderBy } from 'firebase/firestore';
 import { db, handleFirestoreError, OperationType } from '../lib/firebase';
+import { ACTIVE_CORRECTION_STATUSES, isCorrectionRequired } from '../lib/findings';
 import { useAuth } from '../contexts/AuthContext';
 import { Link } from 'react-router-dom';
 import { Repeat, Calendar, MapPin, FileText, Filter, AlertTriangle, CheckCircle, Clock } from 'lucide-react';
@@ -50,7 +51,9 @@ const Recurrences: React.FC = () => {
     const unsubscribeFindings = onSnapshot(qFindings, (snapshot) => {
       const findingData: Finding[] = [];
       snapshot.forEach((doc) => {
-        findingData.push({ id: doc.id, ...doc.data() } as Finding);
+        const data = doc.data();
+        if (!isCorrectionRequired(data)) return;
+        findingData.push({ id: doc.id, ...data } as Finding);
       });
       // Sort by createdAt descending
       findingData.sort((a, b) => {
@@ -84,7 +87,7 @@ const Recurrences: React.FC = () => {
 
   // Apply filters
   const filteredFindings = findings.filter(f => {
-    const matchStatus = filterStatus === 'all' ? true : ['未対応', '対応中', '確認待ち', '再是正'].includes(f.status);
+    const matchStatus = filterStatus === 'all' ? true : ACTIVE_CORRECTION_STATUSES.includes(f.status as any);
     const matchSite = filterSite ? f.siteId === filterSite : true;
     const matchMonth = filterMonth ? f.createdAt?.startsWith(filterMonth) : true;
     return matchStatus && matchSite && matchMonth;
