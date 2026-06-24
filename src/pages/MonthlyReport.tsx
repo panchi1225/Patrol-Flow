@@ -45,9 +45,7 @@ export default function MonthlyReport() {
   } | null>(null);
 
   // 手入力欄のステート
-  const [trendText, setTrendText] = useState('');
-  const [warningText, setWarningText] = useState('');
-  const [nextFocusText, setNextFocusText] = useState('');
+  const [commentText, setCommentText] = useState('');
 
   useEffect(() => {
     const fetchSites = async () => {
@@ -559,32 +557,12 @@ export default function MonthlyReport() {
               <h2 className="text-xl font-bold text-gray-800 mb-4 border-l-4 border-blue-600 pl-3">所見・コメント</h2>
 
               <div className="bg-gray-50 p-4 rounded-xl border border-gray-200 print:bg-transparent print:border-gray-300 print:p-2">
-                <label className="block text-sm font-bold text-gray-700 mb-2 print:text-gray-900">今月の傾向</label>
                 <textarea
-                  value={trendText}
-                  onChange={(e) => setTrendText(e.target.value)}
-                  placeholder="今月の安全パトロールで見られた全体的な傾向を入力してください..."
-                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 min-h-[100px] resize-y print:border-none print:resize-none print:p-0 print:bg-transparent print:min-h-0"
-                />
-              </div>
-
-              <div className="bg-gray-50 p-4 rounded-xl border border-gray-200 print:bg-transparent print:border-gray-300 print:p-2">
-                <label className="block text-sm font-bold text-gray-700 mb-2 print:text-gray-900">要注意事項</label>
-                <textarea
-                  value={warningText}
-                  onChange={(e) => setWarningText(e.target.value)}
-                  placeholder="特に注意すべき事項、再発防止に向けた課題などを入力してください..."
-                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 min-h-[100px] resize-y print:border-none print:resize-none print:p-0 print:bg-transparent print:min-h-0"
-                />
-              </div>
-
-              <div className="bg-gray-50 p-4 rounded-xl border border-gray-200 print:bg-transparent print:border-gray-300 print:p-2">
-                <label className="block text-sm font-bold text-gray-700 mb-2 print:text-gray-900">来月の重点確認事項</label>
-                <textarea
-                  value={nextFocusText}
-                  onChange={(e) => setNextFocusText(e.target.value)}
-                  placeholder="来月のパトロールで重点的に確認する項目を入力してください..."
-                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 min-h-[100px] resize-y print:border-none print:resize-none print:p-0 print:bg-transparent print:min-h-0"
+                  value={commentText}
+                  onChange={(e) => setCommentText(e.target.value)}
+                  placeholder="所見・コメントを入力してください..."
+                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 min-h-[180px] resize-y print:border-none print:resize-none print:p-0 print:bg-transparent print:min-h-0"
+                  aria-label="所見・コメント"
                 />
               </div>
             </div>
