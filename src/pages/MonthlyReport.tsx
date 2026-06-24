@@ -561,9 +561,12 @@ export default function MonthlyReport() {
                   value={commentText}
                   onChange={(e) => setCommentText(e.target.value)}
                   placeholder="所見・コメントを入力してください..."
-                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 min-h-[180px] resize-y print:border-none print:resize-none print:p-0 print:bg-transparent print:min-h-0"
+                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 min-h-[180px] resize-y print:hidden"
                   aria-label="所見・コメント"
                 />
+                <div className="hidden print:block whitespace-pre-wrap break-words text-gray-900 min-h-[1.5rem]">
+                  {commentText || '\u00A0'}
+                </div>
               </div>
             </div>
 
